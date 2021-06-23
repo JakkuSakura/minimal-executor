@@ -5,7 +5,7 @@ use std::future::Future;
 use std::task::{Poll, Context};
 use crate::waker::{AlwaysWake, waker_ref};
 
-pub fn poll_executor<T, F: FnMut(&mut Context<'_>) -> T>(mut f: F) -> T {
+pub fn poll_fn<T, F: FnMut(&mut Context<'_>) -> T>(mut f: F) -> T {
     let waker = waker_ref(&AlwaysWake::INSTANCE);
     let mut cx = Context::from_waker(&waker);
     f(&mut cx)
@@ -25,7 +25,7 @@ fn run_executor<T, F: FnMut(&mut Context<'_>) -> Poll<T>>(mut f: F) -> T {
 
 pub fn poll_on<F: Future>(f: F) -> Poll<F::Output> {
     futures::pin_mut!(f);
-    poll_executor(|cx| f.as_mut().poll(cx))
+    poll_fn(|cx| f.as_mut().poll(cx))
 }
 
 /// A single-threaded task pool for polling futures to completion.
@@ -102,7 +102,7 @@ impl<'a> LocalPool<'a> {
     /// further use of one of the pool's run or poll methods.
     /// Though only one task will be completed, progress may be made on multiple tasks.
     pub fn try_run_one(&mut self) -> bool {
-        poll_executor(|ctx| {
+        poll_fn(|ctx| {
             let ret = self.pool.poll_next_unpin(ctx);
             match ret {
                 Poll::Ready(Some(())) => {
@@ -144,7 +144,7 @@ impl<'a> LocalPool<'a> {
     /// of the pool's run or poll methods. While the function is running, all tasks
     /// in the pool will try to make progress.
     pub fn run_until_stalled(&mut self) {
-        poll_executor(|ctx| {
+        poll_fn(|ctx| {
             let _ = self.poll_pool(ctx);
         });
     }
@@ -166,7 +166,7 @@ impl<'a> LocalPool<'a> {
     }
 
     pub fn poll_once(&mut self) {
-        let _ = poll_executor(|cx| {
+        let _ = poll_fn(|cx| {
             self.pool.poll_next_unpin(cx)
         });
     }
