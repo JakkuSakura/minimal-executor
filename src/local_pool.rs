@@ -11,9 +11,7 @@ pub fn poll_fn<T, F: FnMut(&mut Context<'_>) -> T>(mut f: F) -> T {
     f(&mut cx)
 }
 
-// Set up and run a basic single-threaded spawner loop, invoking `f` on each
-// turn.
-fn run_executor<T, F: FnMut(&mut Context<'_>) -> Poll<T>>(mut f: F) -> T {
+pub fn block_fn<T, F: FnMut(&mut Context<'_>) -> Poll<T>>(mut f: F) -> T {
     let waker = waker_ref(&AlwaysWake::INSTANCE);
     let mut cx = Context::from_waker(&waker);
     loop {
@@ -26,6 +24,12 @@ fn run_executor<T, F: FnMut(&mut Context<'_>) -> Poll<T>>(mut f: F) -> T {
 pub fn poll_on<F: Future>(f: F) -> Poll<F::Output> {
     futures::pin_mut!(f);
     poll_fn(|cx| f.as_mut().poll(cx))
+}
+
+
+pub fn block_on<F: Future>(f: F) -> F::Output {
+    futures::pin_mut!(f);
+    block_fn(|cx| f.as_mut().poll(cx))
 }
 
 /// A single-threaded task pool for polling futures to completion.
@@ -70,7 +74,7 @@ impl<'a> LocalPool<'a> {
     /// The function will block the calling thread until *all* tasks in the pool
     /// are complete, including any spawned while running existing tasks.
     pub fn run(&mut self) {
-        run_executor(|cx| self.poll_pool(cx))
+        block_fn(|cx| self.poll_pool(cx))
     }
 
     /// Runs all tasks and returns after completing one future or until no more progress
