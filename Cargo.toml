@@ -2,6 +2,10 @@
 name = "minimal-executor"
 version = "0.1.0"
 edition = "2018"
+authors = ["Jiangkun Qiu <qiujiangkun@foxmail.com>"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/qiujiangkun/minimal-executor"
+description = """A minimal executor for asynchronous tasks based on the futures-rs library."""
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
