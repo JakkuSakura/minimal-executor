@@ -11,4 +11,4 @@ description = """A minimal executor for asynchronous tasks based on the futures-
 
 [dependencies]
 futures = "0.3"
-crossbeam = "*"
+crossbeam = "0.8"
