@@ -55,7 +55,7 @@ impl<'a, Ret> LocalPool<'a, Ret> {
     }
 
     pub fn spawn<F>(&mut self, f: F)
-        where LocalFutureObj<'a, Ret>: From<F> {
+        where F: Into<LocalFutureObj<'a, Ret>> {
         self.pool.push(f.into())
     }
     /// Run all tasks in the pool to completion.
