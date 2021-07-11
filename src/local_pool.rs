@@ -44,18 +44,18 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 /// single-threaded, it supports a special form of task spawning for non-`Send`
 /// futures, via [`spawn_local_obj`](futures_task::LocalSpawn::spawn_local_obj).
 #[derive(Debug)]
-pub struct LocalPool<'a> {
-    pool: FuturesUnordered<LocalFutureObj<'a, ()>>,
+pub struct LocalPool<'a, Ret = ()> {
+    pool: FuturesUnordered<LocalFutureObj<'a, Ret>>,
 }
 
-impl<'a> LocalPool<'a> {
+impl<'a, Ret> LocalPool<'a, Ret> {
     /// Create a new, empty pool of tasks.
     pub fn new() -> Self {
         Self { pool: FuturesUnordered::new() }
     }
 
     pub fn spawn<F>(&mut self, f: F)
-        where LocalFutureObj<'a, ()>: From<F> {
+        where LocalFutureObj<'a, Ret>: From<F> {
         self.pool.push(f.into())
     }
     /// Run all tasks in the pool to completion.
@@ -105,18 +105,18 @@ impl<'a> LocalPool<'a> {
     /// task was completed; Remaining incomplete tasks in the pool can continue with
     /// further use of one of the pool's run or poll methods.
     /// Though only one task will be completed, progress may be made on multiple tasks.
-    pub fn try_run_one(&mut self) -> bool {
+    pub fn try_run_one(&mut self) -> Poll<Ret> {
         poll_fn(|ctx| {
             let ret = self.pool.poll_next_unpin(ctx);
             match ret {
-                Poll::Ready(Some(())) => {
-                    true
+                Poll::Ready(Some(ret)) => {
+                    Poll::Ready(ret)
                 }
                 Poll::Ready(None) => {
-                    false
+                    Poll::Pending
                 }
                 Poll::Pending => {
-                    false
+                    Poll::Pending
                 }
             }
         })

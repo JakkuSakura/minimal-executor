@@ -38,7 +38,7 @@ fn run_until_single_future() {
 
 #[test]
 fn run_returns_if_empty() {
-    let mut pool = LocalPool::new();
+    let mut pool: LocalPool<()> = LocalPool::new();
     pool.run();
     pool.run();
 }
@@ -65,8 +65,8 @@ fn run_spawn_many() {
 
 #[test]
 fn try_run_one_returns_if_empty() {
-    let mut pool = LocalPool::new();
-    assert!(!pool.try_run_one());
+    let mut pool: LocalPool<()> = LocalPool::new();
+    assert!(pool.try_run_one().is_pending());
 }
 
 #[test]
@@ -93,8 +93,8 @@ fn try_run_one_executes_one_ready() {
 
     for i in 0..ITER {
         assert_eq!(cnt.get(), i);
-        assert!(pool.try_run_one());
+        assert!(pool.try_run_one().is_ready());
         assert_eq!(cnt.get(), i + 1);
     }
-    assert!(!pool.try_run_one());
+    assert!(pool.try_run_one().is_pending());
 }
