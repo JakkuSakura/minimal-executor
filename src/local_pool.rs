@@ -82,7 +82,7 @@ impl<'a, Ret> LocalPool<'a, Ret> {
         let (tx, rx) = std::sync::mpsc::channel();
         Self { pool: FuturesUnordered::new(), rx, tx }
     }
-    pub fn spawner(&mut self) -> Spawner<'a, Ret> {
+    pub fn spawner(&self) -> Spawner<'a, Ret> {
         Spawner {
             tx: self.tx.clone()
         }
