@@ -1,9 +1,10 @@
 use futures::stream::FuturesUnordered;
-use futures::future::LocalFutureObj;
+use futures::future::{LocalFutureObj, FutureObj};
 use futures::StreamExt;
 use std::future::Future;
 use std::task::{Poll, Context};
 use crate::waker::{AlwaysWake, waker_ref};
+use futures::task::{Spawn, SpawnError, LocalSpawn};
 
 pub fn poll_fn<T, F: FnMut(&mut Context<'_>) -> T>(mut f: F) -> T {
     let waker = waker_ref(&AlwaysWake::INSTANCE);
@@ -46,14 +47,46 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 #[derive(Debug)]
 pub struct LocalPool<'a, Ret = ()> {
     pool: FuturesUnordered<LocalFutureObj<'a, Ret>>,
+    rx: std::sync::mpsc::Receiver<LocalFutureObj<'a, Ret>>,
+    tx: std::sync::mpsc::Sender<LocalFutureObj<'a, Ret>>,
 }
+
+#[derive(Clone)]
+pub struct Spawner<'a, Ret> {
+    tx: std::sync::mpsc::Sender<LocalFutureObj<'a, Ret>>,
+}
+
+impl<'a, Ret> Spawner<'a, Ret> {
+    pub fn spawn<F>(&self, f: F) -> Result<(), SpawnError>
+        where F: Into<LocalFutureObj<'a, Ret>> {
+        self.tx.send(f.into()).map_err(|_| SpawnError::shutdown())
+    }
+}
+
+impl Spawn for Spawner<'static, ()> {
+    fn spawn_obj(&self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
+        Self::spawn(self, future)
+    }
+}
+
+impl LocalSpawn for Spawner<'static, ()> {
+    fn spawn_local_obj(&self, future: LocalFutureObj<'static, ()>) -> Result<(), SpawnError> {
+        Self::spawn(self, future)
+    }
+}
+
 
 impl<'a, Ret> LocalPool<'a, Ret> {
     /// Create a new, empty pool of tasks.
     pub fn new() -> Self {
-        Self { pool: FuturesUnordered::new() }
+        let (tx, rx) = std::sync::mpsc::channel();
+        Self { pool: FuturesUnordered::new(), rx, tx }
     }
-
+    pub fn spawner(&mut self) -> Spawner<'a, Ret> {
+        Spawner {
+            tx: self.tx.clone()
+        }
+    }
     pub fn spawn<F>(&mut self, f: F)
         where F: Into<LocalFutureObj<'a, Ret>> {
         self.pool.push(f.into())
@@ -73,8 +106,19 @@ impl<'a, Ret> LocalPool<'a, Ret> {
     ///
     /// The function will block the calling thread until *all* tasks in the pool
     /// are complete, including any spawned while running existing tasks.
-    pub fn run(&mut self) {
-        block_fn(|cx| self.poll_pool(cx))
+    pub fn run(&mut self) -> Vec<Ret> {
+        let mut results = Vec::new();
+        loop {
+            let ret = self.poll_once();
+
+            // no queued tasks; we may be done
+            match ret {
+                Poll::Pending => break,
+                Poll::Ready(None) => break,
+                Poll::Ready(Some(r)) => { results.push(r); }
+            }
+        }
+        results
     }
 
     /// Runs all tasks and returns after completing one future or until no more progress
@@ -106,77 +150,32 @@ impl<'a, Ret> LocalPool<'a, Ret> {
     /// further use of one of the pool's run or poll methods.
     /// Though only one task will be completed, progress may be made on multiple tasks.
     pub fn try_run_one(&mut self) -> Poll<Ret> {
-        poll_fn(|ctx| {
-            let ret = self.pool.poll_next_unpin(ctx);
-            match ret {
-                Poll::Ready(Some(ret)) => {
-                    Poll::Ready(ret)
-                }
-                Poll::Ready(None) => {
-                    Poll::Pending
-                }
-                Poll::Pending => {
-                    Poll::Pending
-                }
+        let ret = self.poll_once();
+        match ret {
+            Poll::Ready(Some(ret)) => {
+                Poll::Ready(ret)
             }
-        })
-    }
-
-    /// Runs all tasks in the pool and returns if no more progress can be made
-    /// on any task.
-    ///
-    /// ```
-    /// use futures::executor::LocalPool;
-    /// use futures::task::LocalSpawnExt;
-    /// use futures::future::{ready, pending};
-    ///
-    /// let mut pool = LocalPool::new();
-    /// let spawner = pool.spawner();
-    ///
-    /// spawner.spawn_local(ready(())).unwrap();
-    /// spawner.spawn_local(ready(())).unwrap();
-    /// spawner.spawn_local(pending()).unwrap();
-    ///
-    /// // Runs the two ready task and returns.
-    /// // The empty task remains in the pool.
-    /// pool.run_until_stalled();
-    /// ```
-    ///
-    /// This function will not block the calling thread and will return the moment
-    /// that there are no tasks left for which progress can be made;
-    /// remaining incomplete tasks in the pool can continue with further use of one
-    /// of the pool's run or poll methods. While the function is running, all tasks
-    /// in the pool will try to make progress.
-    pub fn run_until_stalled(&mut self) {
-        poll_fn(|ctx| {
-            let _ = self.poll_pool(ctx);
-        });
-    }
-
-    // Make maximal progress on the entire pool of spawned task, returning `Ready`
-    // if the pool is empty and `Pending` if no further progress can be made.
-    fn poll_pool(&mut self, cx: &mut Context<'_>) -> Poll<()> {
-        // state for the FuturesUnordered, which will never be used
-        loop {
-            let ret = self.pool.poll_next_unpin(cx);
-
-            // no queued tasks; we may be done
-            match ret {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(None) => return Poll::Ready(()),
-                _ => {}
+            Poll::Ready(None) => {
+                Poll::Pending
+            }
+            Poll::Pending => {
+                Poll::Pending
             }
         }
     }
 
-    pub fn poll_once(&mut self) {
-        let _ = poll_fn(|cx| {
+
+    pub fn poll_once(&mut self) -> Poll<Option<Ret>> {
+        poll_fn(|cx| {
+            while let Ok(fut) = self.rx.try_recv() {
+                self.pool.push(fut)
+            }
             self.pool.poll_next_unpin(cx)
-        });
+        })
     }
 }
 
-impl<'a> Default for LocalPool<'a> {
+impl<'a, Ret> Default for LocalPool<'a, Ret> {
     fn default() -> Self {
         Self::new()
     }

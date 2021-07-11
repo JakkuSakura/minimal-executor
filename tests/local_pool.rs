@@ -30,7 +30,7 @@ fn run_until_single_future() {
             cnt += 1;
         });
         pool.spawn(fut.boxed_local());
-        pool.poll_once();
+        let _ = pool.poll_once();
     }
 
     assert_eq!(cnt, 1);
