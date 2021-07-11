@@ -47,23 +47,23 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 #[derive(Debug)]
 pub struct LocalPool<'a, Ret = ()> {
     pool: FuturesUnordered<LocalFutureObj<'a, Ret>>,
-    rx: crossbeam::channel::Receiver<FutureObj<'a, Ret>>,
-    tx: crossbeam::channel::Sender<FutureObj<'a, Ret>>,
+    rx: crossbeam::channel::Receiver<FutureObj<'static, Ret>>,
+    tx: crossbeam::channel::Sender<FutureObj<'static, Ret>>,
 }
 
 #[derive(Clone)]
-pub struct Spawner<'a, Ret> {
-    tx: crossbeam::channel::Sender<FutureObj<'a, Ret>>,
+pub struct Spawner<Ret> {
+    tx: crossbeam::channel::Sender<FutureObj<'static, Ret>>,
 }
 
-impl<'a, Ret> Spawner<'a, Ret> {
+impl<Ret> Spawner<Ret> {
     pub fn spawn<F>(&self, f: F) -> Result<(), SpawnError>
-        where F: Into<FutureObj<'a, Ret>> {
+        where F: Into<FutureObj<'static, Ret>> {
         self.tx.send(f.into()).map_err(|_| SpawnError::shutdown())
     }
 }
 
-impl Spawn for Spawner<'static, ()> {
+impl Spawn for Spawner<()> {
     fn spawn_obj(&self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
         Self::spawn(self, future)
     }
@@ -76,7 +76,7 @@ impl<'a, Ret> LocalPool<'a, Ret> {
         let (tx, rx) = crossbeam::channel::unbounded();
         Self { pool: FuturesUnordered::new(), rx, tx }
     }
-    pub fn spawner(&self) -> Spawner<'a, Ret> {
+    pub fn spawner(&self) -> Spawner<Ret> {
         Spawner {
             tx: self.tx.clone()
         }
