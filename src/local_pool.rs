@@ -1,10 +1,10 @@
 use futures::stream::FuturesUnordered;
 use futures::future::{LocalFutureObj, FutureObj};
 use futures::StreamExt;
-use std::future::Future;
+use std::future::{Future};
 use std::task::{Poll, Context};
 use crate::waker::{AlwaysWake, waker_ref};
-use futures::task::{Spawn, SpawnError, LocalSpawn};
+use futures::task::{Spawn, SpawnError};
 
 pub fn poll_fn<T, F: FnMut(&mut Context<'_>) -> T>(mut f: F) -> T {
     let waker = waker_ref(&AlwaysWake::INSTANCE);
@@ -47,18 +47,18 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 #[derive(Debug)]
 pub struct LocalPool<'a, Ret = ()> {
     pool: FuturesUnordered<LocalFutureObj<'a, Ret>>,
-    rx: std::sync::mpsc::Receiver<LocalFutureObj<'a, Ret>>,
-    tx: std::sync::mpsc::Sender<LocalFutureObj<'a, Ret>>,
+    rx: crossbeam::channel::Receiver<FutureObj<'a, Ret>>,
+    tx: crossbeam::channel::Sender<FutureObj<'a, Ret>>,
 }
 
 #[derive(Clone)]
 pub struct Spawner<'a, Ret> {
-    tx: std::sync::mpsc::Sender<LocalFutureObj<'a, Ret>>,
+    tx: crossbeam::channel::Sender<FutureObj<'a, Ret>>,
 }
 
 impl<'a, Ret> Spawner<'a, Ret> {
     pub fn spawn<F>(&self, f: F) -> Result<(), SpawnError>
-        where F: Into<LocalFutureObj<'a, Ret>> {
+        where F: Into<FutureObj<'a, Ret>> {
         self.tx.send(f.into()).map_err(|_| SpawnError::shutdown())
     }
 }
@@ -69,17 +69,11 @@ impl Spawn for Spawner<'static, ()> {
     }
 }
 
-impl LocalSpawn for Spawner<'static, ()> {
-    fn spawn_local_obj(&self, future: LocalFutureObj<'static, ()>) -> Result<(), SpawnError> {
-        Self::spawn(self, future)
-    }
-}
-
 
 impl<'a, Ret> LocalPool<'a, Ret> {
     /// Create a new, empty pool of tasks.
     pub fn new() -> Self {
-        let (tx, rx) = std::sync::mpsc::channel();
+        let (tx, rx) = crossbeam::channel::unbounded();
         Self { pool: FuturesUnordered::new(), rx, tx }
     }
     pub fn spawner(&self) -> Spawner<'a, Ret> {
@@ -168,7 +162,7 @@ impl<'a, Ret> LocalPool<'a, Ret> {
     pub fn poll_once(&mut self) -> Poll<Option<Ret>> {
         poll_fn(|cx| {
             while let Ok(fut) = self.rx.try_recv() {
-                self.pool.push(fut)
+                self.pool.push(LocalFutureObj::from(fut))
             }
             self.pool.poll_next_unpin(cx)
         })

@@ -1,6 +1,6 @@
 [package]
 name = "minimal-executor"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2018"
 authors = ["Jiangkun Qiu <qiujiangkun@foxmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -11,3 +11,4 @@ description = """A minimal executor for asynchronous tasks based on the futures-
 
 [dependencies]
 futures = "0.3"
+crossbeam = "*"
