@@ -4,7 +4,7 @@ use futures::StreamExt;
 use std::future::{Future};
 use std::task::{Poll, Context};
 use crate::waker::{AlwaysWake, waker_ref};
-use futures::task::{Spawn, SpawnError};
+use futures::task::{Spawn, SpawnError, UnsafeFutureObj};
 
 pub fn poll_fn<T, F: FnMut(&mut Context<'_>) -> T>(mut f: F) -> T {
     let waker = waker_ref(&AlwaysWake::INSTANCE);
@@ -58,14 +58,14 @@ pub struct Spawner<Ret> {
 
 impl<Ret> Spawner<Ret> {
     pub fn spawn<F>(&self, f: F) -> Result<(), SpawnError>
-        where F: Into<FutureObj<'static, Ret>> {
-        self.tx.send(f.into()).map_err(|_| SpawnError::shutdown())
+        where F: UnsafeFutureObj<'static, Ret> + Send {
+        self.tx.send(FutureObj::new(f)).map_err(|_| SpawnError::shutdown())
     }
 }
 
 impl Spawn for Spawner<()> {
     fn spawn_obj(&self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
-        Self::spawn(self, future)
+        self.tx.send(future).map_err(|_| SpawnError::shutdown())
     }
 }
 
@@ -107,7 +107,7 @@ impl<'a, Ret> LocalPool<'a, Ret> {
 
             // no queued tasks; we may be done
             match ret {
-                Poll::Pending => break,
+                Poll::Pending => {},
                 Poll::Ready(None) => break,
                 Poll::Ready(Some(r)) => { results.push(r); }
             }
