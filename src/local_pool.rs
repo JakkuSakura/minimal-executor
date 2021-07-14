@@ -1,37 +1,9 @@
 use futures::stream::FuturesUnordered;
 use futures::future::{LocalFutureObj, FutureObj};
 use futures::StreamExt;
-use std::future::{Future};
-use std::task::{Poll, Context};
-use crate::waker::{AlwaysWake, waker_ref};
+use std::task::{Poll};
 use futures::task::{Spawn, SpawnError, UnsafeFutureObj};
-
-pub fn poll_fn<T, F: FnMut(&mut Context<'_>) -> T>(mut f: F) -> T {
-    let waker = waker_ref(&AlwaysWake::INSTANCE);
-    let mut cx = Context::from_waker(&waker);
-    f(&mut cx)
-}
-
-pub fn block_fn<T, F: FnMut(&mut Context<'_>) -> Poll<T>>(mut f: F) -> T {
-    let waker = waker_ref(&AlwaysWake::INSTANCE);
-    let mut cx = Context::from_waker(&waker);
-    loop {
-        if let Poll::Ready(t) = f(&mut cx) {
-            return t;
-        }
-    }
-}
-
-pub fn poll_on<F: Future>(f: F) -> Poll<F::Output> {
-    futures::pin_mut!(f);
-    poll_fn(|cx| f.as_mut().poll(cx))
-}
-
-
-pub fn block_on<F: Future>(f: F) -> F::Output {
-    futures::pin_mut!(f);
-    block_fn(|cx| f.as_mut().poll(cx))
-}
+use crate::poll_fn;
 
 /// A single-threaded task pool for polling futures to completion.
 ///
