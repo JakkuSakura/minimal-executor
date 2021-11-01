@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use core::mem::ManuallyDrop;
+use core::sync::atomic::{AtomicBool, Ordering};
 use futures::task::WakerRef;
-use std::mem::ManuallyDrop;
-use std::task::{Waker, RawWaker, RawWakerVTable};
+use core::task::{Waker, RawWaker, RawWakerVTable};
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -75,7 +75,7 @@ unsafe fn copy_ref_raw<T: SimpleWaker>(data: *const ()) -> RawWaker {
 }
 
 unsafe fn wake_raw<T: SimpleWaker>(data: *const ()) {
-    let data = std::ptr::read(data as *const T);
+    let data = core::ptr::read(data as *const T);
     SimpleWaker::wake(&data);
     drop(data)
 }
@@ -86,6 +86,6 @@ unsafe fn wake_by_ref_raw<T: SimpleWaker>(data: *const ()) {
 }
 
 unsafe fn drop_raw<T: SimpleWaker>(data: *const ()) {
-    let data = std::ptr::read(data as *const T);
+    let data = core::ptr::read(data as *const T);
     drop(data)
 }

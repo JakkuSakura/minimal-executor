@@ -1,9 +1,12 @@
+#![no_std]
+extern crate alloc;
+
 mod local_pool;
 pub(crate) mod waker;
 pub use crate::local_pool::*;
 
-use std::future::{Future};
-use std::task::{Poll, Context};
+use core::future::{Future};
+use core::task::{Poll, Context};
 use crate::waker::{AlwaysWake, waker_ref};
 
 pub fn poll_fn<T, F: FnOnce(&mut Context<'_>) -> T>(f: F) -> T {
