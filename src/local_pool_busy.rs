@@ -179,9 +179,3 @@ impl<'a, Ret> LocalPool<'a, Ret> {
     }
 }
 
-impl<'a, Ret> Default for LocalPool<'a, Ret> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
