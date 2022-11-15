@@ -59,7 +59,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             b.iter_with_setup(|| NewLocalPool::new(), |p| spawn_many_new(p, i)),
         );
         c.bench_function(&format!("spawn_many_busy {}", i), |b|
-            b.iter_with_setup(|| BusyLocalPool::new(), |p| spawn_many_busy(p, i)),
+            b.iter_with_setup(|| BusyLocalPool::new(256), |p| spawn_many_busy(p, i)),
         );
     }
 }

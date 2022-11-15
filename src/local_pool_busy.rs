@@ -53,9 +53,9 @@ impl Spawn for Spawner<'static, ()> {
 
 impl<'a, Ret> LocalPool<'a, Ret> {
     /// Create a new, empty pool of tasks.
-    pub fn new() -> Self {
+    pub fn new(cap: usize) -> Self {
         Self {
-            pool: Arc::new(ArrayQueue::new(256)),
+            pool: Arc::new(ArrayQueue::new(cap)),
         }
     }
 
