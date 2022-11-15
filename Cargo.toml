@@ -1,6 +1,6 @@
 [package]
 name = "minimal-executor"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2018"
 authors = ["Jiangkun Qiu <qiujiangkun@foxmail.com>"]
 license = "MIT OR Apache-2.0"
@@ -12,7 +12,11 @@ description = """A minimal executor for asynchronous tasks based on the futures-
 [dependencies]
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
 crossbeam = { version = "0.8", default-features = false, features = ["alloc", "crossbeam-channel"] }
+kanal = "0.1.0-pre7"
 
-[features]
-default = ["std"]
-std = ["crossbeam/std"]
+[dev-dependencies]
+criterion = "0.4.0"
+
+[[bench]]
+name = "bench_local_pool"
+harness = false

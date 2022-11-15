@@ -1,9 +1,16 @@
 #![no_std]
 extern crate alloc;
 
-mod local_pool;
+mod local_pool_new;
+mod local_pool_old;
 pub(crate) mod waker;
-pub use crate::local_pool::*;
+mod local_pool_busy;
+
+pub use crate::local_pool_old::*;
+pub use crate::local_pool_new::LocalPool as NewLocalPool;
+pub use crate::local_pool_new::Spawner as NewSpawner;
+pub use crate::local_pool_busy::Spawner as BusySpawner;
+pub use crate::local_pool_busy::LocalPool as BusyLocalPool;
 
 use core::future::{Future};
 use core::task::{Poll, Context};

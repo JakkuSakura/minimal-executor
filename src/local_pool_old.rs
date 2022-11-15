@@ -4,11 +4,8 @@ use futures::StreamExt;
 use core::task::{Poll};
 use futures::task::UnsafeFutureObj;
 use crate::poll_fn;
-#[cfg(feature = "std")]
 use futures::future::FutureObj;
-#[cfg(feature = "std")]
 use futures::task::Spawn;
-#[cfg(feature = "std")]
 use futures::task::SpawnError;
 
 /// A single-threaded task pool for polling futures to completion.
@@ -25,19 +22,16 @@ use futures::task::SpawnError;
 #[derive(Debug)]
 pub struct LocalPool<'a, Ret = ()> {
     pool: FuturesUnordered<LocalFutureObj<'a, Ret>>,
-    #[cfg(feature = "std")]
-    rx: crossbeam::channel::Receiver<FutureObj<'static, Ret>>,
-    #[cfg(feature = "std")]
-    tx: crossbeam::channel::Sender<FutureObj<'static, Ret>>,
+    rx: kanal::Receiver<FutureObj<'static, Ret>>,
+    tx: kanal::Sender<FutureObj<'static, Ret>>,
 }
 
-#[cfg(feature = "std")]
+
 #[derive(Clone)]
 pub struct Spawner<Ret> {
-    tx: crossbeam::channel::Sender<FutureObj<'static, Ret>>,
+    tx: kanal::Sender<FutureObj<'static, Ret>>,
 }
 
-#[cfg(feature = "std")]
 impl<Ret> Spawner<Ret> {
     pub fn spawn<F>(&self, f: F) -> Result<(), SpawnError>
         where F: UnsafeFutureObj<'static, Ret> + Send {
@@ -45,7 +39,6 @@ impl<Ret> Spawner<Ret> {
     }
 }
 
-#[cfg(feature = "std")]
 impl Spawn for Spawner<()> {
     fn spawn_obj(&self, future: FutureObj<'static, ()>) -> Result<(), SpawnError> {
         self.tx.send(future).map_err(|_| SpawnError::shutdown())
@@ -56,15 +49,10 @@ impl Spawn for Spawner<()> {
 impl<'a, Ret> LocalPool<'a, Ret> {
     /// Create a new, empty pool of tasks.
     pub fn new() -> Self {
-        #[cfg(feature = "std")] {
-            let (tx, rx) = crossbeam::channel::unbounded();
-            Self { pool: FuturesUnordered::new(), rx, tx }
-        }
-        #[cfg(not(feature = "std"))] {
-            Self { pool: FuturesUnordered::new() }
-        }
+        let (tx, rx) = kanal::unbounded();
+        Self { pool: FuturesUnordered::new(), rx, tx }
     }
-    #[cfg(feature = "std")]
+
     pub fn spawner(&self) -> Spawner<Ret> {
         Spawner {
             tx: self.tx.clone()
@@ -97,7 +85,7 @@ impl<'a, Ret> LocalPool<'a, Ret> {
 
             // no queued tasks; we may be done
             match ret {
-                Poll::Pending => {},
+                Poll::Pending => {}
                 Poll::Ready(None) => break,
                 Poll::Ready(Some(r)) => { results.push(r); }
             }
@@ -150,8 +138,7 @@ impl<'a, Ret> LocalPool<'a, Ret> {
 
     pub fn poll_once(&mut self) -> Poll<Option<Ret>> {
         poll_fn(|cx| {
-            #[cfg(feature = "std")]
-            while let Ok(fut) = self.rx.try_recv() {
+            while let Some(fut) = self.rx.try_recv().ok().flatten() {
                 self.pool.push(LocalFutureObj::from(fut))
             }
             self.pool.poll_next_unpin(cx)
